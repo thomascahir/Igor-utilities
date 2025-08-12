@@ -10,92 +10,10 @@
 // Created:28-04-2025
 // ============================================================================
 //	Updated: 
-// 1.0 - 28-04-2025 - Thomas Cahir
+// 1.0 - 28-04-2025 - Init
 // 1.01 - 01-06-2025 - Added various file loading options
 // 1.02 - 12-08-2025 - Fully reworked file import logic. Now uses reworked import functions and ImportNEV/NSX etc
 //*********************************************************************************************************************
-// If Modular Panel is active allow loading of GUI experimentLoader. Else use function directly
-// #if(strlen(functionlist("BuildDynamicModularPanel", ";", "KIND:2")) > 0)
-// Menu "📑 Experiment Control"
-// 	"📂Experiment Loader", /q, ExperimentLoaderPanel()
-// End	//	Data
-// //--------------------------------------------------------------------------------------
-// Function ExperimentLoaderPanel() // ; [] , () = : | "customData=gc_SV(name=Data,title=DataFldr,properties=value= _NUM:1,proc=value_STR=Click+Enter to set,proc=ModularPanel#UniversalSetVariableProc,disable=1,size={400,30})"
-// 	KillWindow/Z p_ExperimentLoader
-// 	// string specialAction = "Path:setPath=sysDataPath"
-// 	// string customData_gc_Data = "gc_Data(type=SetVariable,title=Data Folder,properties=<value_STR=Click+Enter to set,proc=ModularFilesystem#SystemPathInfoProc,size={410,30}>,specialAction=" + specialAction + ",)"
-// 	// string customData_gc_Import = "gc_Import(type=Button,title=Import,properties=<proc=ModularFilesystem#ExperimentLoaderProc>)"
-// 	// string customData_gc_LoadFile = "gc_LoadFile(type=SetVariable,title=LoadFile,properties=<value_STR=datafile001,size={150,30}>)"
-// 	// string customData_gc_Paradigm = "gc_Paradigm(type=PopupMenu,title=Paradigm,properties=<value=None;Motor>)"
-// 	string layoutItems = "experimentLoader[parentList=parent_fileLoader]"
-// 	string panelSizing = "(25,75,520,175)"
-// 	BuildDynamicModularPanel("ExperimentLoader",panelSizing=panelSizing, panelTitle="ExperimentLoader")
-// End
-
-// Function TestGraphPanel()
-// 	KillWindow/Z p_StimRuns
-// 	string layoutItems = "StimRuns[parentList=parent_StimRuns]"
-// 	BuildDynamicModularPanel("StimRuns", panelTitle="StimRuns", savedDataFolder=GetDataFolder(1))
-// End
-// //--------------------------------------------------------------------------------------
-// static Function ExperimentLoaderProc(ba) : ButtonControl
-// 	STRUCT WMButtonAction &ba
-// 	if(ba.eventCode != 2)
-// 		return 0
-// 	endif
-// 	ControlInfo/W=$(ba.win) SetVariable_DataPathSV; string experimentPath = S_Value
-// 	ControlInfo/W=$(ba.win) SetVariable_FolderNameSV; string name = "root:Data:" + S_Value, ID = S_Value
-// 	ControlInfo/W=$(ba.win) PopupMenu_ParadigmPU; string paradigm = S_Value
-// 	ControlInfo/W=$(ba.win) SetVariable_LoadFileSV; string loadfile = S_Value
-// 	ControlInfo/W=$(ba.win) CheckBox_Overwrite; variable overwrite = V_Value
-// 	string params = ""
-// 	#ifdef ForceInvert
-// 		params = "forceInvert;copyScales|Proximal|Run_Number,Run_Number_Times"
-// 		// need to redo CreateTimeStimWave now to use mergeWaves param with said function. creating trialRunInfo from initial logfile info 
-// 		// also need to modify modifyWaves param to forceinvert if neeeded. make NEV_RunInfo from logfiles current and phase data
-// 		// also need to add bandpass filter param for prox and distal
-// 		#else
-// 		if(CheckString(ID, "1334 1335 1373 1374 1372") > 0) // known troublemakers
-// 			params = "forceInvert"
-// 			PrintAdv("forceInvert enabled for " + name, type="data", state="indented")
-// 		else // DBS
-// 			// we need to Swaps EMG and Red_Button waves for DBS experiments (atleast 1311, check this)
-// 			// e.g EMG becomes Stim_Trigger, and Red_Button becomes EMG
-// 			params = ""
-// 		endif
-// 	#endif
-// 	switch(ba.eventCode)
-// 		case 2: // mouse up
-// 			//PrintAdv("ExperimentLoader: " + name + " " + paradigm + " " + loadfile)
-// 			string result = ExperimentLoader(name, loadfile, params=params, experimentPath=experimentPath, overwrite=overwrite)
-// 			if(CheckString(result, "userCancelled"))
-// 				PrintAdv("ExperimentLoader: User Cancelled folder selection", type="warning", state="end")
-// 				return 0
-// 			endif
-// 			break
-// 	endswitch
-// end
-// //--------------------------------------------------------------------------------------
-// static Function SystemPathInfoProc(sva) : SetVariableControl
-// 	STRUCT WMSetVariableAction &sva
-// 	string saveDF = GetDataFolder(1)
-// 	ControlInfo/W=$(sva.win) $(sva.ctrlname)
-// 	string loadfile = S_Value
-// 	ControlInfo/W=$(sva.win) SetVariable_FolderNameSV
-// 	string name = "root:Data:" + S_Value
-//     switch(sva.eventCode )
-// 		case 1: // mouse up
-// 		case 2: // Enter key
-// 			string systemPath = GetSystemPath(name, message="Select datafolder with files", forceNewPath=0)
-// 			string cmd = "SetVariable " + sva.ctrlname + "," + "win=" + sva.win + ",value=_STR:\"" + systemPath + "\""
-// 			Execute cmd
-// 			SetDataFolder saveDF
-// 		case 3: // Live update
-// 		case 8: // End edit		
-// 			break
-// 	endswitch
-// end
-// #endif
 /////////////////////////////////////////////////////////////////////////////////////////
 Function/S ExperimentLoader(string name, string loadFile, [string params, string experimentPath, variable overwrite, variable beSilent])
 // What: Generalised Experiment Loader. Loads experimental files from disk into Igor.
