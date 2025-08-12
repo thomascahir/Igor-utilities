@@ -10,7 +10,7 @@
 // Created:28-04-2025
 // ============================================================================
 //	Updated: 
-// 1.0 - 28-04-2025 - Init
+// 1.0 - 28-04-2025 - Initial creation
 // 1.01 - 01-06-2025 - Added various file loading options
 // 1.02 - 12-08-2025 - Fully reworked file import logic. Now uses reworked import functions and ImportNEV/NSX etc
 //*********************************************************************************************************************
@@ -82,7 +82,11 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 	//// IMPORTING
 	variable importListCount = ItemsInList(importList), v_files = 0, v_imports = 0, refNum = 0
 	variable failedToImport = 0, importedFiles = 0, successfulImports = 0, partialImports = 0, skippedFolders = 0
-	PrintAdv("ImportList: " + importList + " (" + num2str(importListCount) + " items)", type="experiment")
+	if(importListCount == 0)
+		PrintAdv("File Types: Import all files", type="logfiles_icon")
+	else
+		PrintAdv("File Types: Import " + importList + " (" + num2str(importListCount) + " items)", type="logfiles_icon")
+	endif
 	for(v_files=0; v_files<loadWhatVar; v_files++) // LOOP THROUGH FILES (e.g datafile001, datafile002 etc)
 		variable importStartTime = ticks, importTime = 0
 		fileBase = StringFromList(v_files, listOfDataFiles) // From list, still has reference file tag
@@ -111,6 +115,7 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 		else
 			failedToImport += 1
 		endif
+		importListCount = (importListCount == 0 ? 1 : importListCount)
 		//// FILE IMPORT POSTFIXES - Apply postprocessing fixes to imported files
 		if(strlen(postFixList) > 0 )
 			variable totalPostfixes = 0, postFixCount = ItemsInList(postFixList, ","); string postFixMessage = ""
@@ -274,7 +279,11 @@ Function/S ImportFile(string systemPath, string fileName, [string igorPath])
 						break
 					default: // Multiextension file types
 						if(GrepString(fileExt, "\\.ns[1-5]"))
-							ImportNSXFile(fileToLoad)
+							#ifdef useLegacyNSX
+								LoadNSxFile(fileToLoad)
+							#else
+								ImportNSXFile(fileToLoad)
+							#endif
 							importedCount += 1
 						endif
 						break

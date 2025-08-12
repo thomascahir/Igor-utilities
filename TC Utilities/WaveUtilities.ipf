@@ -1547,16 +1547,16 @@ Function ReduceWaveNoise(wave w, wave/t baselineStats, [string outputName])
     return 0
 End
 //--------------------------------------------------------------------------------------
-Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable highHz, [string outputName, variable overwrite, variable beSilent, variable fast, variable order])
+Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable highHz, [string outputName, variable overwrite, variable fast, variable order, variable notch])
 // What: Applies bandpass filter with FIR (default) or fast IIR option, includes bidirectional filtering for zero-phase
-    // inputWave: Wave to filter | lowHz: Low cutoff frequency | highHz: High cutoff frequency | [outputName]: Optional name for output wave | [overwrite]: If 1, filters inputWave directly; if 0, creates new wave | [fast]: If 1, use fast IIR filter; if 0, use FIR (default) | [order]: IIR filter order (default 4)
+    // inputWave: Wave to filter | lowHz: Low cutoff frequency | highHz: High cutoff frequency | [outputName]: Optional name for output wave | [overwrite]: If 1, filters inputWave directly; if 0, creates new wave | [fast]: If 1, use fast IIR filter; if 0, use FIR (default) | [order]: IIR filter order (default 4) | [notch]: If 1, applies 50Hz notch filter after bandpass
     overwrite = ParamIsDefault(overwrite) ? 0 : overwrite
-    beSilent = ParamIsDefault(beSilent) ? 0 : beSilent
     fast = ParamIsDefault(fast) ? 0 : fast // Default to slower FIR mode
     order = ParamIsDefault(order) ? -4 : order // Default IIR order
+    notch = ParamIsDefault(notch) ? 0 : notch // Default no notch filtering
     variable sampleRate = 1/deltax(inputWave), nyquistFreq = sampleRate/2
     if(lowHz <= 0 || highHz <= 0 || lowHz >= highHz)
-        return $""
+        return $"" 
     endif
     if(highHz >= nyquistFreq * 0.95)
         highHz = nyquistFreq * 0.9 // Limit to 90% of Nyquist for safety
@@ -1571,6 +1571,9 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
         Duplicate/O inputWave, $filteredName
         WAVE/Z filteredWave = $filteredName
     endif
+	if(notch == 1)
+		NotchFilter(filteredWave, 50, overwrite=1, order=order)
+	endif
     // Apply filtering based on fast parameter (IIR not FIR)
     if(fast) // Fast IIR filtering with bidirectional option for zero-phase
         variable numPnt = numpnts(filteredWave)
@@ -1593,6 +1596,39 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
         variable highNorm2 = min(highNorm + highTransition, 0.499) // High cutoff end
         FilterFIR/LO={lowNorm1, lowNorm2, 101}/HI={highNorm1, highNorm2, 101} filteredWave
         Note filteredWave, "FIR Bandpass filtered: " + num2str(lowHz) + "-" + num2str(highHz) + " Hz (101-point, linear phase, sampleRate=" + num2str(sampleRate/1000) + "kHz)"
+    endif
+    return filteredWave
+End
+//--------------------------------------------------------------------------------------
+Threadsafe Function/WAVE NotchFilter(WAVE inputWave, variable notchHz, [string outputName, variable overwrite, variable bandwidth, variable order])
+// What: Removes specific frequency (e.g., 50/60Hz power line noise) using IIR notch filter with zero-phase
+    // inputWave: Wave to filter | notchHz: Frequency to remove | [outputName]: Optional name for output wave | [overwrite]: If 1, filters inputWave directly | [bandwidth]: Notch width in Hz (default 2Hz) | [order]: Filter order (default -4 for bidirectional, positive for forward only)
+    overwrite = ParamIsDefault(overwrite) ? 0 : overwrite
+	bandwidth = ParamIsDefault(bandwidth) ? 2 : bandwidth
+	order = ParamIsDefault(order) ? -4 : order
+    variable sampleRate = 1/deltax(inputWave), nyquistFreq = sampleRate/2
+    if(notchHz <= 0 || notchHz >= nyquistFreq * 0.95)
+        return $"" 
+    endif
+    if(overwrite) // Filter input wave directly
+        WAVE/Z filteredWave = inputWave
+    else // Create new filtered wave
+        string filteredName = SelectString(ParamIsDefault(outputName), outputName, NameOfWave(inputWave) + "_notched")
+        Duplicate/O inputWave, $filteredName
+        WAVE/Z filteredWave = $filteredName
+    endif
+    variable numPnt = numpnts(filteredWave), notchQ = 50 // Q factor for notch width
+    variable normalizedFreq = notchHz * deltax(filteredWave) // Normalize frequency
+    if(order > 0) // Forward filtering only
+        FilterIIR/N={normalizedFreq, notchQ}/ORD=(order) filteredWave
+        Note filteredWave, "IIR Notch filtered: " + num2str(notchHz) + " Hz (±" + num2str(bandwidth/2) + "Hz, Order=" + num2str(order) + ", Forward only)"
+    else // Zero-phase bidirectional IIR notch filtering
+        FilterIIR/N={normalizedFreq, notchQ}/ORD=(abs(order)) filteredWave // Forward pass
+        Duplicate/FREE filteredWave, backWave
+        multithread backWave = filteredWave[numPnt-1-p] // Reverse the wave
+        FilterIIR/N={normalizedFreq, notchQ}/ORD=(abs(order)) backWave // Backward pass
+        multithread filteredWave = backWave[numPnt-1-p] // Reverse back to original order
+        Note filteredWave, "IIR Notch filtered: " + num2str(notchHz) + " Hz (±" + num2str(bandwidth/2) + "Hz, Order=" + num2str(abs(order)) + ", Bidirectional=" + SelectString(order>0, "Yes", "No") + ")"
     endif
     return filteredWave
 End
