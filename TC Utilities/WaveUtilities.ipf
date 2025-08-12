@@ -1553,7 +1553,7 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
     overwrite = ParamIsDefault(overwrite) ? 0 : overwrite
     beSilent = ParamIsDefault(beSilent) ? 0 : beSilent
     fast = ParamIsDefault(fast) ? 0 : fast // Default to slower FIR mode
-    order = ParamIsDefault(order) ? 4 : order // Default IIR order
+    order = ParamIsDefault(order) ? -4 : order // Default IIR order
     variable sampleRate = 1/deltax(inputWave), nyquistFreq = sampleRate/2
     if(lowHz <= 0 || highHz <= 0 || lowHz >= highHz)
         return $""
@@ -1571,19 +1571,20 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
         Duplicate/O inputWave, $filteredName
         WAVE/Z filteredWave = $filteredName
     endif
-    // Apply filtering based on fast parameter
+    // Apply filtering based on fast parameter (IIR not FIR)
     if(fast) // Fast IIR filtering with bidirectional option for zero-phase
         variable numPnt = numpnts(filteredWave)
         if(order > 0) // Forward filtering only
             FilterIIR/HI=(highHz*deltax(filteredWave))/LO=(lowHz*deltax(filteredWave))/ORD=(order) filteredWave
-        else // Bidirectional filtering for zero-phase (TSFilter approach)
+        else // True zero-phase bidirectional filtering (filtfilt approach)
+            FilterIIR/HI=(highHz*deltax(filteredWave))/LO=(lowHz*deltax(filteredWave))/ORD=(abs(order)) filteredWave // Forward pass
             Duplicate/FREE filteredWave, backWave
             multithread backWave = filteredWave[numPnt-1-p] // Reverse the wave
-            FilterIIR/HI=(highHz*deltax(backWave))/LO=(lowHz*deltax(backWave))/ORD=(abs(order)) backWave
-            multithread filteredWave = backWave[numPnt-1-p] // Reverse back
+            FilterIIR/HI=(highHz*deltax(backWave))/LO=(lowHz*deltax(backWave))/ORD=(abs(order)) backWave // Backward pass
+            multithread filteredWave = backWave[numPnt-1-p] // Reverse back to original order
         endif
         Note filteredWave, "IIR Bandpass filtered: " + num2str(lowHz) + "-" + num2str(highHz) + " Hz (Order=" + num2str(abs(order)) + ", Bidirectional=" + SelectString(order>0, "Yes", "No") + ")"
-    else // Standard FIR filtering (your original implementation)
+    else // Standard FIR filtering | Slower, but may be more accurate
         variable lowNorm = lowHz / sampleRate, highNorm = highHz / sampleRate
         variable lowTransition = max(lowNorm * 0.1, 0.01), highTransition = max(highNorm * 0.1, 0.01)
         variable lowNorm1 = max(lowNorm - lowTransition, 0.001) // Low cutoff start

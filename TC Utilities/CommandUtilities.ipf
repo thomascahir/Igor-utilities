@@ -15,7 +15,6 @@
 #include "WaveUtilities" // Utilities for waves
 #include "IndexingUtilities" // Utilities for indexing files
 #include "VariableUtilities" // Utilities for variables
-#include "AnalysisUtilities" // Utilities for analysis
 //--------------------------------------------------------------------------------------
 strConstant dev_icon = "💻 DevMode: "
 strConstant debug_icon = "🐞 Debug: " 
