@@ -594,7 +594,7 @@ Function/S GetAllSysSubFolders(string startFolder, [variable includeStartFolder,
 		folderIndex += 1
 	while(1)
 	// Clean up
-	KillPath/Z $tempPathName, W_FoldersToProcess
+	KillPath/Z $tempPathName; KillWaves/Z W_FoldersToProcess
 	return allFolders
 End
 //--------------------------------------------------------------------------------------
