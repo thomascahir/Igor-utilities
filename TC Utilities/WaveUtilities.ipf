@@ -1547,22 +1547,25 @@ Function ReduceWaveNoise(wave w, wave/t baselineStats, [string outputName])
     return 0
 End
 //--------------------------------------------------------------------------------------
-Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable highHz, [string outputName, variable overwrite, variable fast, variable order, variable notch])
+Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable highHz, [string outputName, variable overwrite, variable fast, variable order, variable notch, variable removeDC, variable SNR])
 // What: Applies bandpass filter with FIR (default) or fast IIR option, includes bidirectional filtering for zero-phase
-    // inputWave: Wave to filter | lowHz: Low cutoff frequency | highHz: High cutoff frequency | [outputName]: Optional name for output wave | [overwrite]: If 1, filters inputWave directly; if 0, creates new wave | [fast]: If 1, use fast IIR filter; if 0, use FIR (default) | [order]: IIR filter order (default 4) | [notch]: If 1, applies 50Hz notch filter after bandpass
+    // inputWave: Wave to filter | lowHz: Low cutoff frequency | highHz: High cutoff frequency | [outputName]: Optional name for output wave | [overwrite]: If 1, filters inputWave directly; if 0, creates new wave | [fast]: If 1, use fast IIR filter; if 0, use FIR (default) | [order]: IIR filter order (default 4) | [notch]: If 1, applies 50Hz notch filter after bandpass | [removeDC]: If 1, removes DC component (mean) before filtering
     overwrite = ParamIsDefault(overwrite) ? 0 : overwrite
     fast = ParamIsDefault(fast) ? 0 : fast // Default to slower FIR mode
     order = ParamIsDefault(order) ? -4 : order // Default IIR order
     notch = ParamIsDefault(notch) ? 0 : notch // Default no notch filtering
+    removeDC = ParamIsDefault(removeDC) ? 0 : removeDC // Default no DC removal
     variable sampleRate = 1/deltax(inputWave), nyquistFreq = sampleRate/2
     if(lowHz <= 0 || highHz <= 0 || lowHz >= highHz)
         return $"" 
     endif
-    if(highHz >= nyquistFreq * 0.95)
-        highHz = nyquistFreq * 0.9 // Limit to 90% of Nyquist for safety
+    if(highHz >= nyquistFreq * 0.99)
+        highHz = nyquistFreq * 0.99 // Limit to 90% of Nyquist for safety
+		Print "highHz > nyquistFreq. Reducing to 0.99 of Nyquist ("+num2str(highHz)+")"
     endif
-    if(lowHz >= nyquistFreq * 0.9)
-        lowHz = nyquistFreq * 0.8
+    if(lowHz >= nyquistFreq * 0.99)
+		Print "lowHz > nyquistFreq. Reducing to 0.99 of Nyquist ("+num2str(lowHz)+")"
+        lowHz = nyquistFreq * 0.99
     endif
     if(overwrite) // Filter input wave directly
         WAVE/Z filteredWave = inputWave
@@ -1570,6 +1573,9 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
         string filteredName = SelectString(ParamIsDefault(outputName), outputName, NameOfWave(inputWave) + "_filtered")
         Duplicate/O inputWave, $filteredName
         WAVE/Z filteredWave = $filteredName
+    endif
+    if(removeDC == 1) // Remove DC component (mean) before filtering
+        wavestats/q filteredWave; multithread filteredWave -= v_avg
     endif
 	if(notch == 1)
 		NotchFilter(filteredWave, 50, overwrite=1, order=order)
@@ -1597,6 +1603,9 @@ Threadsafe Function/WAVE BandpassFilter(WAVE inputWave, variable lowHz, variable
         FilterFIR/LO={lowNorm1, lowNorm2, 101}/HI={highNorm1, highNorm2, 101} filteredWave
         Note filteredWave, "FIR Bandpass filtered: " + num2str(lowHz) + "-" + num2str(highHz) + " Hz (101-point, linear phase, sampleRate=" + num2str(sampleRate/1000) + "kHz)"
     endif
+	if(!paramIsDefault(SNR)) // If you want to get printout of SNR
+		Note filteredWave, "SNR: " + num2str(CalculateSNR(filteredWave, fast=1))+"dB"
+	endif
     return filteredWave
 End
 //--------------------------------------------------------------------------------------

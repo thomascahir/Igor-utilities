@@ -10,7 +10,7 @@
 // Created:28-04-2025
 // ============================================================================
 //	Updated: 
-// 1.0 - 28-04-2025 - Initial creation
+// 1.0 - 28-04-2025 - Thomas Cahir
 // 1.01 - 01-06-2025 - Added various file loading options
 // 1.02 - 12-08-2025 - Fully reworked file import logic. Now uses reworked import functions and ImportNEV/NSX etc
 //*********************************************************************************************************************
@@ -20,7 +20,7 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 	// name: Name of datatype/folder e.g 'EPs'/'Data' data will be stored in root:EPs. If blank will be in root: unless paradigm overrides
 	// loadFile: Are we loading single file, multiple, or everything in folder? Parse strlist of file(s) to load (e.g "datafile001;datafile002") or pass "all" / "" to load all files in folder.
 	// [params]: applies specific formatting params, whether paradigm passed or not. [overwrite]: 1 = overwrite existing run subfolders, 2 = overwrite whole datafolder
-	string importList = "", ignoreFiles = "", subfoldername = "", referenceFileExt = "????", postFixList = "" // ???? means default to index all files
+	string importList = "", ignoreFiles = "", subfoldername = "", referenceFileExt = "????", postFixList = "", usedLegacy = "" // ???? means default to index all files
 	string saveFolderPath = "root:", saveFilePath = "", systemPath = "", saveDF = GetDataFolder(1), fileToLoad = "", fileName = "", fileBase = "", fileType = ""
 	variable i = 0, timeStart = ticks
 	params = SelectString(!ParamIsDefault(params), "", params)
@@ -43,11 +43,11 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 			PrintAdv("param: " + param, state="debug", type="debug", beSilent=beSilent)
 			strswitch(param) // apply params
 				case "importList": // What file extensions to import (e.g .csv,.log,.ns2,.ns5). Else import all.
-					importList = SelectString(strlen(paramArg) > 0, paramArg, ".nev;.log;.ns2;.ns5")
+					importList = SelectString(strlen(paramArg) > 0, "", paramArg)
 					break
 				case "ignoreFiles": // What files to ignore (either file name e.g datafile002)
 					// not yet implemented
-					ignoreFiles = SelectString(strlen(paramArg) > 0, paramArg, ".nev;.log;.ns2;.ns5")
+					ignoreFiles = SelectString(strlen(paramArg) > 0, "", paramArg)
 					break
 				case "postFixes": // Apply the following stringlist postFixes. E.g fix file names, create stim wave, fix run times etc
 					postFixList = paramArg
@@ -65,14 +65,14 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 		return ""
 	endif
 	// TBD: Add in function that creates a list of files to ignore import on, via Warning selection.these are skipped during import
-	variable reportEachPostFix = 0, loadWhatVar = 0
+	variable loadWhatVar = 0
 	if(StringMatch(loadFile, "all"))
 		string listOfDataFiles = IndexedFile(systemSymPath, -1, referenceFileExt) 
-		reportEachPostFix = 0; loadWhatVar = ItemsInList(listOfDataFiles)
+		loadWhatVar = ItemsInList(listOfDataFiles)
 		string listOfDataFilesPrint = ReplaceString(referenceFileExt,listOfDataFiles,"")
 		PrintAdv("Found " + num2str(loadWhatVar) + " files: " + StringFromList(0, listOfDataFilesPrint) + "..." + StringFromList(ItemsInList(listOfDataFiles) - 1, listOfDataFilesPrint), type="search", beSilent=beSilent)	
 	elseif(StrLen(loadFile) > 0) // Load specific file
-		reportEachPostFix = 1; loadWhatVar = 1
+		loadWhatVar = 1
 		listOfDataFiles = loadFile	
 		PrintAdv("Loading specific file: " + listOfDataFiles, type="search", beSilent=beSilent)
 	else
@@ -83,9 +83,9 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 	variable importListCount = ItemsInList(importList), v_files = 0, v_imports = 0, refNum = 0
 	variable failedToImport = 0, importedFiles = 0, successfulImports = 0, partialImports = 0, skippedFolders = 0
 	if(importListCount == 0)
-		PrintAdv("File Types: Import all files", type="logfiles_icon")
+		PrintAdv("File Types: Import all files", type="link")
 	else
-		PrintAdv("File Types: Import " + importList + " (" + num2str(importListCount) + " items)", type="logfiles_icon")
+		PrintAdv("File Types: Import " + importList + " (" + num2str(importListCount) + " items)", type="link")
 	endif
 	for(v_files=0; v_files<loadWhatVar; v_files++) // LOOP THROUGH FILES (e.g datafile001, datafile002 etc)
 		variable importStartTime = ticks, importTime = 0
@@ -108,6 +108,9 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 			PrintAdv("Import error: " + importResult, type="error")
 			failedToImport += 1
 		endif
+		if(GrepString(importResult, "legacy"))
+			usedLegacy = " (via legacy LoadNSxFile)"
+		endif
 		if(importedFiles >= importListCount)
 			successfulImports += 1
 		elseif(importedFiles < importListCount && importedFiles > 0)
@@ -115,10 +118,10 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 		else
 			failedToImport += 1
 		endif
-		importListCount = (importListCount == 0 ? 1 : importListCount)
 		//// FILE IMPORT POSTFIXES - Apply postprocessing fixes to imported files
+		string postFixMessage = ""
 		if(strlen(postFixList) > 0 )
-			variable totalPostfixes = 0, postFixCount = ItemsInList(postFixList, ","); string postFixMessage = ""
+			variable totalPostfixes = 0, postFixCount = ItemsInList(postFixList, ",")
 			for(paramIndex=0; paramIndex<postFixCount; paramIndex++)
 			fullParam = StringFromList(paramIndex, postFixList, ","); variable fixStartTime = ticks, fixTime = 0
 			param = ModifyString(fullParam, rules="extractBeforeAny", ruleMods="[~;~(~|~")
@@ -132,14 +135,29 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 					totalPostfixes += 1
 					break
 				case "bandpassFilter": // bandpass filter wave. still WIP
-					Wave/Z filterWave = $(StringFromList(0, paramArg, ","))
-					if(WaveExists(filterWave))
-						variable lowPassHz = str2num(StringFromList(1, paramArg, ",")), highPassHz = str2num(StringFromList(2, paramArg, ","))
-						BandpassFilter(filterWave, lowPassHz, highPassHz); fixTime = (ticks - fixStartTime) * 1000 / 60
-						//postFixMessage += "Bandpass Filtered " + num2str(bandpassResult) + " waves | In " + num2str(fixTime) + "ms\n"
-						totalPostfixes += 1
+					string filterWaveList = ExtractByDelimiter(paramArg, "|", "before"), filterParams = ExtractByDelimiter(paramArg, "|", "after")
+					variable lowPassHz = str2num(StringFromList(0, filterParams, "-")), highPassHz = str2num(StringFromList(1, filterParams, "-"))
+					#ifdef CustomFilters //If you want to just use def for filterlevel
+						lowPassHz = k_HP // these are reversed, should change BP to match
+						highPassHz = k_LP
+					#endif
+					if(lowPassHz == NaN || lowPassHz <= 0 || highPassHz == NaN || highPassHz <= 0)
+						PrintAdv("Error: Bad bandpass filter params: " + filterParams + " from " + fileName, type="error", state="debug;indented")
 					else
-						PrintAdv("Error: Could not find wave to bandpass filter: " + StringFromList(0, paramArg, ","), type="error")
+						for(i=0; i<ItemsInList(filterWaveList, "&"); i+=1)
+							string filterWaveName = StringFromList(i, filterWaveList, "&")
+							Wave/Z filterWave = $(filterWaveName)
+							if(WaveExists(filterWave))
+								BandpassFilter(filterWave, lowPassHz, highPassHz, fast=1, notch=1, overwrite=1, removeDC=1, order=-4); fixTime = (ticks - fixStartTime) * 1000 / 60
+								if(i==0)
+									postFixMessage += "BandpassFiltered["+filterParams+"Hz]: "
+								endif
+								postFixMessage += filterWaveName + "(" + num2str(fixTime) + "ms);"
+								totalPostfixes += 1
+							else
+								PrintAdv("Error: Could create bandpass filter for: " + filterWaveName + " from " + fileName, type="error", state="debug;indented")
+							endif
+						endfor
 					endif
 					break
 				case "copyScales": // Copy Scales of wave to target others. E.g Proximal|Target1,Target2
@@ -154,7 +172,7 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 						postFixMessage += "Copied scales of " + num2str(targetCount) + " waves | In " + num2str(fixTime) + "ms\n"
 						totalPostfixes += 1
 					else
-						PrintAdv("Error: Could not find wave to copy scales to: " + StringFromList(0, paramArg, ","), type="error")
+						PrintAdv("Error: Could not find wave to copy scales to: " + StringFromList(0, paramArg, ","), type="error", state="indented")
 					endif
 					break
 				case "mergeWaves": // Merge waves, or specific columns of waves into a single wave
@@ -176,14 +194,14 @@ Function/S ExperimentLoader(string name, string loadFile, [string params, string
 					break
 			endswitch
 			endfor
-			if(totalPostfixes > 0 && reportEachPostFix == 1)
-				postFixMessage = num2str(totalPostfixes) + " PostFixes Applied:\n" + postFixMessage
-				PrintAdv(postFixMessage, type="info", state="indented", beSilent=0)
+			if(totalPostfixes > 0)
+				postFixMessage = " | " + num2str(totalPostfixes) + " PostFixes Applied\n" + postFixMessage
 			endif
 		endif
 		WaveInformation("all", "all", beSilent=1)
 		importTime = (ticks - importStartTime) / 60
-		PrintAdv("Finished Importing " + fileName + " | " + num2str(importedFiles) + "/" + num2str(importListCount) + " imported files in " + num2str(importTime) + "s", type="info", state="indented", beSilent=beSilent)
+		importListCount = (importListCount == 0 ? importedFiles : importListCount)
+		PrintAdv("Finished Importing " + fileName + " | " + num2str(importedFiles) + "/" + num2str(importListCount) + " imported files in " + num2str(importTime) + "s " + usedLegacy + postFixMessage , type="info", state="indented", beSilent=beSilent)
 		importedFiles = 0 // reset to 0
 		SetDataFolder $saveFolderPath
 	endfor
@@ -216,7 +234,7 @@ Function/S ImportFile(string systemPath, string fileName, [string igorPath])
 // What: Import all files matching fileName from systemPath into Igor
 	// systemPath: System path to folder containing files (e.g. "C:Experiment:Datafolder")
 	// fileName: Base filename without extension (e.g. "datafile001"). [igorPath]: Igor data folder path (e.g. "root:Data:"). If empty, uses current folder
-	string saveDF = GetDataFolder(1), targetPath = "", fileToLoad = "", fileExt = "", fullFileName = ""
+	string saveDF = GetDataFolder(1), targetPath = "", fileToLoad = "", fileExt = "", fullFileName = "", usedLegacy = ""
 	variable importedCount = 0, refNum
 	if(ParamIsDefault(igorPath) || strlen(igorPath) == 0)
 		targetPath = saveDF
@@ -280,9 +298,10 @@ Function/S ImportFile(string systemPath, string fileName, [string igorPath])
 					default: // Multiextension file types
 						if(GrepString(fileExt, "\\.ns[1-5]"))
 							#ifdef useLegacyNSX
-								LoadNSxFile(fileToLoad)
+								LoadNSxFile(fileToLoad, beSilent=1)
+								usedLegacy = " (via legacy LoadNSxFile)"
 							#else
-								ImportNSXFile(fileToLoad)
+								ImportNSXFile(fileToLoad, beSilent=1)
 							#endif
 							importedCount += 1
 						endif
@@ -293,7 +312,7 @@ Function/S ImportFile(string systemPath, string fileName, [string igorPath])
 	endfor
 	KillPath/Z tempPath
 	SetDataFolder $saveDF
-	return num2str(importedCount) + " files imported"
+	return num2str(importedCount) + " files imported" + usedLegacy
 End
 //--------------------------------------------------------------------------------------
 //==============================================================================
@@ -344,10 +363,11 @@ Function/S ImportHDF5File(string filename, [string channels, variable StartTime,
 	endif
 End
 //--------------------------------------------------------------------------------------
-Function/S ImportNEVFile(string fileName, [variable timesOnly, string channels, variable mergeOutput])
+Function/S ImportNEVFile(string fileName, [variable timesOnly, string channels, variable mergeOutput, variable beSilent])
 // What: Streamlined version of NEV file loader
 	string loaded = "", saveDF = GetDataFolder(1), noteStr = ""
 	variable fileRef, count, numChannels = 0, success = 0
+	beSilent = ParamIsDefault(beSilent) ? 0 : beSilent
 	timesOnly = ParamIsDefault(timesOnly) ? 0 : timesOnly
 	channels = SelectString(ParamIsDefault(channels), channels, "")
 	if(strlen(fileName) == 0) // File validation
@@ -449,16 +469,17 @@ Function/S ImportNEVFile(string fileName, [variable timesOnly, string channels, 
 	SetDataFolder saveDF
 	success = ItemsInList(loaded) > 0 ? 1 : 0
 	if(success)
-		PrintAdv("Imported NEV file", type="info")
+		PrintAdv("Imported NEV file", type="info", beSilent=beSilent)
 	else
 		PrintAdv("Failed to import NEV file", type="error")
 	endif
 	return loaded
 End
 //--------------------------------------------------------------------------------------
-Function/S ImportNSXFile(string fileName, [string channels, variable startTime, variable stopTime])
+Function/S ImportNSXFile(string fileName, [string channels, variable startTime, variable stopTime, variable beSilent])
 // What: Streamlined NSX file loader for both 2.1 and 2.2+ formats
 	string loaded = "", saveDF = GetDataFolder(1), waveNameStr = ""; variable fileRef, success = 0
+	beSilent = ParamIsDefault(beSilent) ? 0 : beSilent
 	channels = SelectString(ParamIsDefault(channels), channels, "")
 	startTime = ParamIsDefault(startTime) ? 0 : startTime
 	stopTime = ParamIsDefault(stopTime) ? inf : stopTime
@@ -646,7 +667,7 @@ Function/S ImportNSXFile(string fileName, [string channels, variable startTime, 
 	SetDataFolder saveDF
 	success = ItemsInList(loaded) > 0 ? 1 : 0
 	if(success)
-		PrintAdv("Imported NSX: " + ParseFilePath(0, fileName, ":", 1, 0) + " (" + num2str(ItemsInList(loaded)) + " channels)", type="info")
+		PrintAdv("Imported NSX: " + ParseFilePath(0, fileName, ":", 1, 0) + " (" + num2str(ItemsInList(loaded)) + " channels)", type="info", beSilent=beSilent)
 	endif
 	return loaded
 End

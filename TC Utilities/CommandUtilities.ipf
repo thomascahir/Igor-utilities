@@ -201,11 +201,11 @@ Function PrintAdv(string message, [string state, string type, string failState, 
 			typeIcon = "🐞 Debug: "
 		endif
 	else // TYPE: For iconised prefixes via parallel input and output lists for type match
-		string typeList1 = "devMode;debug;warning;error;success;process;search;display;folder;experiment;time;config;neural;start;stop;testrun;burst;info;skip;dot;blank;"
-		string typeList2 = "reset;cleanup;stars;repeat;slider;parent;rules;variables;add;write;magic;data;dataset;segment;noise;correlate"
-		string iconList1 = "💻 DevMode: ;🐞 Debug: ;⚠️ ;❌ ;✅ ;⚙️ ;🔍 ;📊 ;📂 ;📦 ;⏱️ ;📑 ;⚡ ;🟢 ;🔴 ;🟣 ;🔵 ;ℹ️ ;⏩ ;- ;• ;"	
-		string iconList2 = "🔄 ;🧹 ;✨ ;🔁 ;🎚️ ;🖧 ;📏 ;🔢 ;➕ ;✏️ ;🧙 ;📈 ;🗂️ ;✂️ ;🔇 ;🔗 "
-		string typeList = typeList1 + typeList2, iconList = iconList1 + iconList2
+		//string typeList1 = "devMode;debug;warning;error;success;process;search;display;folder;experiment;time;config;neural;start;stop;testrun;burst;info;skip;dot;blank;"
+		//string typeList2 = "reset;cleanup;stars;repeat;slider;parent;rules;variables;add;write;magic;data;dataset;segment;noise;correlate"
+		//string iconList1 = "💻 DevMode: ;🐞 Debug: ;⚠️ ;❌ ;✅ ;⚙️ ;🔍 ;📊 ;📂 ;📦 ;⏱️ ;📑 ;⚡ ;🟢 ;🔴 ;🟣 ;🔵 ;ℹ️ ;⏩ ;- ;• ;"	
+		//string iconList2 = "🔄 ;🧹 ;✨ ;🔁 ;🎚️ ;🖧 ;📏 ;🔢 ;➕ ;✏️ ;🧙 ;📈 ;🗂️ ;✂️ ;🔇 ;🔗 "
+		string typeList = ICO_TYPE_1 + ICO_TYPE_2, iconList = ICO_1 + ICO_2
 		typeIcon = GetMatchingListItem(typeList, iconList, type, failedReturn="- ")
 	endif
 	if(!ParamIsDefault(callFunc)) // Handle function call tracking if provided
